@@ -1,0 +1,133 @@
+section .data
+    msgA0 db "Enter A[0]: ", 0
+    msgA1 db "Enter A[1]: ", 0
+    msgA2 db "Enter A[2]: ", 0
+    msgB0 db "Enter B[0]: ", 0
+    msgB1 db "Enter B[1]: ", 0
+    msgB2 db "Enter B[2]: ", 0
+    result_msg db "Dot product is: ", 0
+
+section .bss
+    A resd 3
+    B resd 3
+    input resb 10
+
+section .text
+    global _start
+
+_start:
+    ; Read vector A
+    mov ecx, A
+    mov edx, msgA0
+    call read_store
+    mov edx, msgA1
+    call read_store
+    mov edx, msgA2
+    call read_store
+
+    ; Read vector B
+    mov ecx, B
+    mov edx, msgB0
+    call read_store
+    mov edx, msgB1
+    call read_store
+    mov edx, msgB2
+    call read_store
+
+    ; Compute dot product
+    xor eax, eax
+    xor ebx, ebx
+.loop:
+    mov esi, [A + ebx*4]
+    mov edi, [B + ebx*4]
+    imul esi, edi
+    add eax, esi
+    inc ebx
+    cmp ebx, 3
+    jl .loop
+
+    ; Print result label
+    mov eax, 4
+    mov ebx, 1
+    mov ecx, result_msg
+    mov edx, 18
+    int 0x80
+
+    ; Print result value
+    call print_eax
+
+    ; Exit
+    mov eax, 1
+    xor ebx, ebx
+    int 0x80
+
+read_store:
+    push ecx
+    ; Print prompt
+    mov eax, 4
+    mov ebx, 1
+    mov ecx, edx
+    mov edx, 13
+    int 0x80
+    ; Read input
+    call read_int
+    pop ecx
+    mov [ecx], eax
+    add ecx, 4
+    ret
+
+read_int:
+    mov eax, 3
+    mov ebx, 0
+    mov ecx, input
+    mov edx, 10
+    int 0x80
+
+    xor eax, eax
+    xor ebx, ebx
+    xor esi, esi
+    cmp byte [input], '-'
+    jne .next
+    mov esi, 1
+    inc ebx
+.next:
+    mov bl, [input + ebx]
+    cmp bl, 10
+    je .done
+    sub bl, '0'
+    imul eax, 10
+    add eax, ebx
+    inc ebx
+    jmp .next
+.done:
+    cmp esi, 1
+    jne .exit
+    neg eax
+.exit:
+    ret
+
+print_eax:
+    mov ebx, 10
+    mov ecx, input + 9
+    mov byte [ecx], 10
+    cmp eax, 0
+    jge .pos
+    neg eax
+    mov byte [ecx - 1], '-'
+    dec ecx
+.pos:
+    .convert:
+        dec ecx
+        xor edx, edx
+        div ebx
+        add dl, '0'
+        mov [ecx], dl
+        test eax, eax
+        jnz .convert
+    mov eax, 4
+    mov ebx, 1
+    mov edx, input + 10
+    sub edx, ecx
+    mov ecx, ecx
+    int 0x80
+    ret
