@@ -1,22 +1,23 @@
+
 section .data
-    msgA0 db "Enter A[0]: ", 0
-    msgA1 db "Enter A[1]: ", 0
-    msgA2 db "Enter A[2]: ", 0
-    msgB0 db "Enter B[0]: ", 0
-    msgB1 db "Enter B[1]: ", 0
-    msgB2 db "Enter B[2]: ", 0
+    msgA0      db "Enter A[0]: ", 0
+    msgA1      db "Enter A[1]: ", 0
+    msgA2      db "Enter A[2]: ", 0
+    msgB0      db "Enter B[0]: ", 0
+    msgB1      db "Enter B[1]: ", 0
+    msgB2      db "Enter B[2]: ", 0
     result_msg db "Dot product is: ", 0
 
 section .bss
-    A resd 3
-    B resd 3
-    input resb 10
+    A      resd 3
+    B      resd 3
+    input  resb 10
 
 section .text
     global _start
 
 _start:
-    ; Read vector A
+    ; --- read vector A ---
     mov ecx, A
     mov edx, msgA0
     call read_store
@@ -25,7 +26,7 @@ _start:
     mov edx, msgA2
     call read_store
 
-    ; Read vector B
+    ; --- read vector B ---
     mov ecx, B
     mov edx, msgB0
     call read_store
@@ -34,100 +35,122 @@ _start:
     mov edx, msgB2
     call read_store
 
-    ; Compute dot product
-    xor eax, eax
-    xor ebx, ebx
-.loop:
+    ; --- compute dot product into EAX ---
+    xor eax, eax        ; accumulator = 0
+    xor ebx, ebx        ; index = 0
+.dot_loop:
     mov esi, [A + ebx*4]
     mov edi, [B + ebx*4]
     imul esi, edi
     add eax, esi
     inc ebx
     cmp ebx, 3
-    jl .loop
+    jl .dot_loop
 
-    ; Print result label
+    ; --- save dot in EAX across the upcoming syscall ---
+    push eax
+
+    ; --- print "Dot product is: " ---
     mov eax, 4
     mov ebx, 1
     mov ecx, result_msg
-    mov edx, 18
+    mov edx, 15             ; length of the string
     int 0x80
 
-    ; Print result value
+    ; --- restore dot product into EAX ---
+    pop eax
+
+    ; --- print the numeric result plus newline ---
     call print_eax
 
-    ; Exit
+    ; --- exit ---
     mov eax, 1
     xor ebx, ebx
     int 0x80
 
+
+; read_store: print prompt in EDX, then read integer into [ECX], advance ECX by 4
 read_store:
     push ecx
-    ; Print prompt
+    ; print prompt
     mov eax, 4
     mov ebx, 1
     mov ecx, edx
-    mov edx, 13
+    mov edx, 13             ; all prompts are 13 bytes long
     int 0x80
-    ; Read input
+
+    ; read integer
     call read_int
+
     pop ecx
-    mov [ecx], eax
+    mov [ecx], eax          ; store parsed int into array
     add ecx, 4
     ret
 
+
+; read_int: read up to newline from STDIN into 'input', parse decimal, return value in EAX
 read_int:
+    ; read up to 10 bytes into 'input'
     mov eax, 3
     mov ebx, 0
     mov ecx, input
     mov edx, 10
     int 0x80
 
-    xor eax, eax
-    xor ebx, ebx
-    xor esi, esi
-    cmp byte [input], '-'
-    jne .next
-    mov esi, 1
-    inc ebx
-.next:
-    mov bl, [input + ebx]
-    cmp bl, 10
+    ; parse ASCII digits (supports negative numbers)
+    xor eax, eax            ; result = 0
+    xor ebx, ebx            ; index = 0
+    xor esi, esi            ; sign flag = 0
+
+    mov dl, [input + ebx]
+    cmp dl, '-'
+    jne .parse_loop
+    mov esi, 1              ; set sign flag
+    inc ebx                 ; skip '-'
+
+.parse_loop:
+    mov dl, [input + ebx]
+    cmp dl, 10              ; newline?
     je .done
-    sub bl, '0'
-    imul eax, 10
-    add eax, ebx
+    sub dl, '0'             ; convert ASCII to digit
+    movzx edx, dl
+    imul eax, eax, 10
+    add eax, edx
     inc ebx
-    jmp .next
+    jmp .parse_loop
+
 .done:
     cmp esi, 1
-    jne .exit
+    jne .ret
     neg eax
-.exit:
+.ret:
     ret
 
+
+; print_eax: print signed integer in EAX, followed by newline
 print_eax:
-    mov ebx, 10
-    mov ecx, input + 9
-    mov byte [ecx], 10
+    mov ebx, 10             ; divisor
+    mov ecx, input+9
+    mov byte [ecx], 10      ; append '\n'
     cmp eax, 0
-    jge .pos
+    jge .positive
     neg eax
-    mov byte [ecx - 1], '-'
+    mov byte [ecx-1], '-'
     dec ecx
-.pos:
-    .convert:
-        dec ecx
-        xor edx, edx
-        div ebx
-        add dl, '0'
-        mov [ecx], dl
-        test eax, eax
-        jnz .convert
-    mov eax, 4
-    mov ebx, 1
-    mov edx, input + 10
-    sub edx, ecx
-    mov ecx, ecx
+.positive:
+.convert:
+    dec ecx
+    xor edx, edx
+    div ebx                 ; eax = eax/10, edx = remainder
+    add dl, '0'
+    mov [ecx], dl
+    test eax, eax
+    jnz .convert
+
+    mov eax, 4              ; sys_write
+    mov ebx, 1              ; stdout
+    ; ecx already points to start of string
+    mov edx, input+10
+    sub edx, ecx            ; length = (input+10)-ecx
     int 0x80
     ret
